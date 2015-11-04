@@ -1,0 +1,2 @@
+lakatos@isa.local Sprava pre pouzivatela lakatos
+etela@isa.local,lakatos@isa.local Sprava pre etelu a lakatosa
