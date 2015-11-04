@@ -21,11 +21,6 @@
 
 using namespace std;
 
-void initParams(struct params *params);
-void parseFile(FILE *f);
-int checkParameters(int argc, char **argv, struct params *params);
-void checkFile(string nameOfFile);
-
 
 struct params {
 
@@ -42,6 +37,12 @@ struct message {
 };
 
 typedef vector<message> messageVec;
+
+
+void initParams(struct params *params);
+messageVec parseFile(FILE *f);
+int checkParameters(int argc, char **argv, struct params *params);
+messageVec checkFile(string nameOfFile);
 
 
 
@@ -150,16 +151,21 @@ int checkParameters(int argc, char **argv, struct params *params) {
 }
 
 /* Otevreni souboru */
-void checkFile(string nameOfFile) {
+messageVec checkFile(string nameOfFile) {
 	
 	FILE *f = fopen(nameOfFile.c_str(), "r");
 	
 	if(f != NULL)
-		parseFile(f);
+		return parseFile(f);
 	
+	else {
+		
+		fprintf(stderr, "Chyba - nepovedlo se otevrit vami zadany soubor. Pro nápovědu spusťte program jen s parametrem --help.");
+		exit(-1);
+	}	
 }
 
-void parseFile(FILE *f) {
+messageVec parseFile(FILE *f) {
 
 	
 	size_t bufferSize = 100;
@@ -185,14 +191,18 @@ void parseFile(FILE *f) {
     //printf("%s", vecOfMessages[1].content.c_str());
     
     fflush(stdout);
+    fclose(f);		// soubor uz nebude potreba, muzeme zavrit
+    free(buffer);	// buffer jiz take nebude potreba, vycistime pamet
     
-	return;
+	return vecOfMessages;
 	
 }
+
 
 int main(int argc, char **argv) {
 
 	struct params params;
+	messageVec vecOfMessages;
 
 	initParams(&params);
 	if(checkParameters(argc, argv, &params) == -1)
@@ -201,10 +211,8 @@ int main(int argc, char **argv) {
 	printf("%s %d %s %d\n", (params.ip).c_str(), params.port, (params.file).c_str(), params.seconds);
 
 
-
-	checkFile(params.file);
+	vecOfMessages = checkFile(params.file);	// ziskani vektoru se zpravami a adresy
 	
-
 
 	return 0;
 }
