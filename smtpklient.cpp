@@ -1,5 +1,7 @@
 /* Projekt - ISA - smtpklient.cpp	*/
 /* Klient SMTP pro odesílání pošty	*/
+/* Projekt - ISA - smtpklient.cpp	*/
+/* Klient SMTP pro odesílání pošty	*/
 /* Filip Kalous (xkalou03)   		*/
 
 
@@ -10,13 +12,19 @@
 #include <string.h>
 #include <stdbool.h>
 #include <string>
+#include <vector>
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 
-using std::string;
+using namespace std;
+
+void initParams(struct params *params);
+void parseFile(FILE *f);
+int checkParameters(int argc, char **argv, struct params *params);
+void checkFile(string nameOfFile);
 
 
 struct params {
@@ -26,6 +34,15 @@ struct params {
 	string file;
 	int seconds;
 };
+
+struct message {
+
+	string content;
+	string addressess;
+};
+
+typedef vector<message> messageVec;
+
 
 
 /* Inicializace parametru */
@@ -132,6 +149,46 @@ int checkParameters(int argc, char **argv, struct params *params) {
 	return 0;
 }
 
+/* Otevreni souboru */
+void checkFile(string nameOfFile) {
+	
+	FILE *f = fopen(nameOfFile.c_str(), "r");
+	
+	if(f != NULL)
+		parseFile(f);
+	
+}
+
+void parseFile(FILE *f) {
+
+	
+	size_t bufferSize = 100;
+    char *buffer = (char*) malloc(bufferSize * sizeof(char));
+    struct message tempMes;
+    string tempA;
+    string tempC;
+    messageVec vecOfMessages;	// vektor pro ukladani struktur message
+
+
+    int lineNumber = 0;
+    
+    while(getline(&buffer, &bufferSize, f) != -1) { /* Zde si budu ukladat kazdy radek, pro nasledne odeslani emailu */
+    
+    	tempA = strtok(buffer, " "); 
+    	tempC = strtok(NULL, "");
+    	tempMes.content = tempC;
+    	tempMes.addressess = tempA;
+    	lineNumber++;
+    	vecOfMessages.push_back(tempMes);
+        
+    }
+    //printf("%s", vecOfMessages[1].content.c_str());
+    
+    fflush(stdout);
+    
+	return;
+	
+}
 
 int main(int argc, char **argv) {
 
@@ -145,9 +202,15 @@ int main(int argc, char **argv) {
 
 
 
+	checkFile(params.file);
+	
 
-	int socket;
-	struct sockaddr_in server;
 
 	return 0;
 }
+
+
+
+
+
+
