@@ -43,6 +43,7 @@ void initParams(struct params *params);
 messageVec parseFile(FILE *f);
 int checkParameters(int argc, char **argv, struct params *params);
 messageVec checkFile(string nameOfFile);
+int connectToServer(params *params);
 
 
 
@@ -198,11 +199,53 @@ messageVec parseFile(FILE *f) {
 	
 }
 
+int connectToServer(params *params) {
+
+	string hostServer = "isa.local";
+	int sock;
+	struct sockaddr_in server;
+    struct hostent *hp;
+	
+	sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (sock == -1) {
+		
+		fprintf(stderr, "Nepodarilo se vytvorit socket.");
+    	return(-1);
+    }
+
+	/*=====Verify host=====*/
+
+    //server.sin_family = AF_INET;
+    hp = gethostbyname(hostServer.c_str()); // parametr - adresa serveru
+
+    if(hp) {
+
+    	bzero(&server, sizeof(server));
+    	server.sin_family = AF_INET;
+    	server.sin_port = params->port;
+    	bcopy(hp->h_addr, &(server.sin_addr.s_addr), hp->h_length);
+    }
+    else {
+    	
+    	fprintf(stderr, "%s: unknown host\n", hostServer.c_str());
+      	return(-1);
+    }
+    
+    if(connect (sock, (struct sockaddr*)&server, sizeof(server) ) != 0 ){
+    	fprintf(stderr, "Nepodarilo se pripojit k portu");
+        return -1;
+    }
+
+	return sock;
+}
+
 
 int main(int argc, char **argv) {
 
 	struct params params;
 	messageVec vecOfMessages;
+	string from = "xkalou03@isa.local";
+
 
 	initParams(&params);
 	if(checkParameters(argc, argv, &params) == -1)
@@ -213,7 +256,12 @@ int main(int argc, char **argv) {
 
 	vecOfMessages = checkFile(params.file);	// ziskani vektoru se zpravami a adresy
 	
-
+	
+		
+	// connecting to smtp server and creating socket
+	
+	int sock = connectToServer(&params);
+	
 	return 0;
 }
 
