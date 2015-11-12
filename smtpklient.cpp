@@ -156,9 +156,10 @@ messageVec checkFile(string nameOfFile) {
 	
 	FILE *f = fopen(nameOfFile.c_str(), "r");
 	
-	if(f != NULL)
+	if(f != NULL) {
+	 
 		return parseFile(f);
-	
+	}
 	else {
 		
 		fprintf(stderr, "Chyba - nepovedlo se otevrit vami zadany soubor. Pro nápovědu spusťte program jen s parametrem --help.");
@@ -189,9 +190,10 @@ messageVec parseFile(FILE *f) {
     	vecOfMessages.push_back(tempMes);
         
     }
-    //printf("%s", vecOfMessages[1].content.c_str());
     
-    fflush(stdout);
+    //printf("%s", vecOfMessages[1].content.c_str());
+
+    //fflush(stdout);
     fclose(f);		// soubor uz nebude potreba, muzeme zavrit
     free(buffer);	// buffer jiz take nebude potreba, vycistime pamet
     
@@ -201,13 +203,15 @@ messageVec parseFile(FILE *f) {
 
 int connectToServer(params *params) {
 
-	string hostServer = "isa.local";
+	string hostServer = "localhost";
 	int sock;
 	struct sockaddr_in server;
     struct hostent *hp;
+    
+    
 	
 	sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock == -1) {
+	if(sock == -1) {
 		
 		fprintf(stderr, "Nepodarilo se vytvorit socket.");
     	return(-1);
@@ -221,9 +225,10 @@ int connectToServer(params *params) {
     if(hp) {
 
     	bzero(&server, sizeof(server));
-    	server.sin_family = AF_INET;
-    	server.sin_port = params->port;
+    	server.sin_family   = AF_INET;
+    	server.sin_port     = htons(params->port);
     	bcopy(hp->h_addr, &(server.sin_addr.s_addr), hp->h_length);
+    	//memcpy(&(server.sin_addr), hp->h_addr, hp->h_length);
     }
     else {
     	
@@ -231,12 +236,32 @@ int connectToServer(params *params) {
       	return(-1);
     }
     
-    if(connect (sock, (struct sockaddr*)&server, sizeof(server) ) != 0 ){
-    	fprintf(stderr, "Nepodarilo se pripojit k portu");
+    if(connect(sock, (struct sockaddr*) &server, sizeof(server)) == -1) {
+    	fprintf(stderr, "Nepodarilo se pripojit");
         return -1;
     }
 
 	return sock;
+}
+
+string sendMessage(int sock, string text) {
+
+	unsigned char c;
+	string buffer("");
+
+	if(strcmp(text.c_str(), "%1%") != 0)	// chceme ziskat welcome message od serveru
+		write(sock, text.c_str(), text.size());
+	
+	while(1) {
+		
+		if(recv(sock, &c, sizeof(unsigned char), 0) < 1)
+			break;
+		else if(c == '\n')
+			break;
+		else if(c != '\r')
+			buffer +=c;
+	}
+	return buffer;
 }
 
 
@@ -245,6 +270,9 @@ int main(int argc, char **argv) {
 	struct params params;
 	messageVec vecOfMessages;
 	string from = "xkalou03@isa.local";
+	int sock;
+	string buffer("");
+	char c;
 
 
 	initParams(&params);
@@ -255,12 +283,21 @@ int main(int argc, char **argv) {
 
 
 	vecOfMessages = checkFile(params.file);	// ziskani vektoru se zpravami a adresy
-	
-	
-		
+
 	// connecting to smtp server and creating socket
+
+	if((sock = connectToServer(&params)) == -1) {
+		return -1;
+	}
+
+	/* Finally - communication with server */
 	
-	int sock = connectToServer(&params);
+	buffer = sendMessage(sock, "%1%");	// ziskani welcome message - 
+										// znaky %1% jsou pro rozpoznani, ze chci preskocit posilani socketu na server
+	printf("%s\n", buffer.c_str());
+	
+	buffer = sendMessage(sock, "EHLO " + from + "\r\n");
+	printf("%s\n", buffer.c_str());
 	
 	return 0;
 }
