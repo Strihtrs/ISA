@@ -191,9 +191,9 @@ messageVec parseFile(FILE *f) {
         
     }
     
-    //printf("%s", vecOfMessages[1].content.c_str());
+    //printf("%s\n", vecOfMessages[0].addressess.c_str());
+    
 
-    //fflush(stdout);
     fclose(f);		// soubor uz nebude potreba, muzeme zavrit
     free(buffer);	// buffer jiz take nebude potreba, vycistime pamet
     
@@ -244,14 +244,18 @@ int connectToServer(params *params) {
 	return sock;
 }
 
-string sendMessage(int sock, string text) {
+void sendMessage(int sock, string text, int context) {
+
+	if(context != 0)	// chceme ziskat welcome message od serveru
+		write(sock, text.c_str(), text.size());
+}
+
+string recvMessage(int sock) {
 
 	unsigned char c;
 	string buffer("");
+	int b;
 
-	if(strcmp(text.c_str(), "%1%") != 0)	// chceme ziskat welcome message od serveru
-		write(sock, text.c_str(), text.size());
-	
 	while(1) {
 		
 		if(recv(sock, &c, sizeof(unsigned char), 0) < 1)
@@ -261,7 +265,8 @@ string sendMessage(int sock, string text) {
 		else if(c != '\r')
 			buffer +=c;
 	}
-	return buffer;
+
+	return buffer;	
 }
 
 
@@ -292,12 +297,70 @@ int main(int argc, char **argv) {
 
 	/* Finally - communication with server */
 	
-	buffer = sendMessage(sock, "%1%");	// ziskani welcome message - 
-										// znaky %1% jsou pro rozpoznani, ze chci preskocit posilani socketu na server
-	printf("%s\n", buffer.c_str());
+	sendMessage(sock, "", 0);	// ziskani welcome message
+	//printf("%s\n", recvMessage(sock).c_str());
 	
-	buffer = sendMessage(sock, "EHLO " + from + "\r\n");
-	printf("%s\n", buffer.c_str());
+	sendMessage(sock, "EHLO " + from + "\r\n", 1);	// uvodni zprava - poslani pozdravu EHLO s adresou klienta
+	
+	while((buffer = recvMessage(sock).c_str()) != "") {	
+		
+		//printf("%s\n", buffer.c_str());
+		
+		if(buffer.find("250 ") != string::npos) { // cteme tak dlouho, dokud nenajdeme posledni radek, 
+												  // ktery musi zacinat kodem a za nim hned mezera, ostatni radky maji pomlcku za kodem
+            break;
+        }
+	}
+	
+	// kdo bude emaily posilat
+	
+	//printf("%s\n", buffer.c_str());
+	//printf("%s\n", vecOfMessages[0].addressess.c_str());
+	
+	// komu budeme data posilat
+	int i = 0;
+	int pos = 0;
+	string temp;
+	string delimiter = ",";
+	
+	while(i < vecOfMessages.size()) {
+	
+		sendMessage(sock, "MAIL FROM: <" + from + ">\r\n", 1);
+	
+		// prijmuti odpovedi
+		buffer = recvMessage(sock);	
+		printf("%s\n", buffer.c_str());
+	
+		while((pos = vecOfMessages[i].addressess.find(delimiter)) != string::npos) {
+		
+			temp = vecOfMessages[i].addressess.substr(0, pos);
+			
+		  	sendMessage(sock, "RCPT TO: <" + temp + ">\r\n", 1);
+			buffer = recvMessage(sock);	
+			printf("%s\n", buffer.c_str());
+			
+			vecOfMessages[i].addressess.erase(0, pos + delimiter.length());
+		}
+		
+		sendMessage(sock, "RCPT TO: <" + vecOfMessages[i].addressess + ">\r\n", 1);
+		buffer = recvMessage(sock);	
+		printf("%s\n", buffer.c_str());
+		
+		sendMessage(sock, "DATA\r\n", 1);
+		buffer = recvMessage(sock);	
+		printf("%s\n", buffer.c_str());
+		
+		sendMessage(sock, vecOfMessages[i].content + "\r\n", 1);
+		sendMessage(sock, ".\r\n", 1);
+		buffer = recvMessage(sock);	
+		printf("%s\n", buffer.c_str());
+		
+		i++;
+	}
+	
+	sendMessage(sock, "QUIT\r\n", 1);
+	buffer = recvMessage(sock);	
+		printf("%s\n", buffer.c_str());
 	
 	return 0;
 }
