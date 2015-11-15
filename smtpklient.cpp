@@ -63,9 +63,10 @@ void initParams(struct params *params) {
 	params->seconds = 0;
 }
 
-int sock;
-int signalCatch = 0;
-int state = 0;
+/* Globalni promenne */
+int sock;	// socket
+int signalCatch = 0;	// stavova promenna, kdyz odchytime signal
+int state = 0;			// stavova promenna, ktera znaci v jake fazi komunikace jsme
 
 
 
@@ -190,7 +191,7 @@ messageVec checkFile(string nameOfFile) {
 	}
 	else {
 		
-		fprintf(stderr, "Chyba - nepovedlo se otevřít vámi zadaný soubor. Pro nápovědu spusťte program jen s parametrem --help.");
+		fprintf(stderr, "Chyba - nepovedlo se otevřít vámi zadaný soubor. Pro nápovědu spusťte program jen s parametrem --help.\n");
 		exit(-1);
 	}	
 }
@@ -210,21 +211,19 @@ messageVec parseFile(FILE *f) {
     
     while(getline(&buffer, &bufferSize, f) != -1) { /* Zde si budu ukladat kazdy radek, pro nasledne odeslani emailu */
     
-    	tempA = strtok(buffer, " "); 
-    	tempC = strtok(NULL, "");
-    	tempMes.content = tempC;
+    	tempA              = strtok(buffer, " "); 
+    	tempC              = strtok(NULL, "");
+    	tempMes.content    = tempC;
     	tempMes.addressess = tempA;
     	lineNumber++;
     	vecOfMessages.push_back(tempMes);
         
     }
 
-
     fclose(f);		// soubor uz nebude potreba, muzeme zavrit
     free(buffer);	// buffer jiz take nebude potreba, vycistime pamet
     
 	return vecOfMessages;
-	
 }
 
 int connectToServer(params *params) {
@@ -235,7 +234,7 @@ int connectToServer(params *params) {
 	struct addrinfo *res;
 
 
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family   = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 
 	int errHost = getaddrinfo(params->ip.c_str(), params->port.c_str(), &hints, &res);
@@ -249,12 +248,12 @@ int connectToServer(params *params) {
 	sock = socket(res->ai_family, res->ai_socktype, 0);
 	if(sock == -1) {
 		
-		fprintf(stderr, "Nepodarilo se vytvorit socket.");
+		fprintf(stderr, "Nepodařilo se vytvořit socket.");
     	return(-1);
     }	
 
 	if(connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
-	    perror("connect");
+	    perror("Connect");
 	    return 1;
 	}
     
@@ -285,7 +284,7 @@ string recvMessage(int sock, int *err) {
 		else if(c != '\r')
 			buffer +=c;
 	}
-	
+	/* Overeni, zda od serveru prisla zprava o uspechu, pokud ne, musime vyresit chybu. */
 	if(!(buffer.find("250") != string::npos || 
 	     buffer.find("251") != string::npos || 
 	     buffer.find("252") != string::npos || 
@@ -302,18 +301,14 @@ string recvMessage(int sock, int *err) {
 
 void checkError(string error, int sock) {
 
-	int err = 0;
-	printf("Error: %s\n", error.c_str());
-	sendQuit();
-	exit(0);
+	fprintf(stderr, "Error: %s\n", error.c_str());
 }
 
 void signalAction(int signum) {
 
-	fprintf(stderr, "Dostal jsem signal %d na zabiti!\n", signum);
 	signalCatch = 1;
 
-	if(state < 4 || state > 5) {
+	if(state < 4 || state > 5) { 	// okamzite muzu zabit klienta, pokud uz neposilam zpravu na server
 		
 		sendQuit();
 		exit(0);
@@ -332,7 +327,7 @@ int main(int argc, char **argv) {
 	struct sigaction action;
 	messageVec vecOfMessages;
 	string from = "xkalou03";
-	string buffer("");
+	string buffer;
 	char c;
 	int err = 0;
 
@@ -345,31 +340,30 @@ int main(int argc, char **argv) {
 
 
 
-
+	/* Inicializace struktury s parametry programu */
 	initParams(&params);
 	if(checkParameters(argc, argv, &params) == -1)
 		return -1;
 
 
 	vecOfMessages = checkFile(params.file);	// ziskani vektoru se zpravami a adresy
-
-	// connecting to smtp server and creating socket
-
+	
+	/* Vytvareni socketu a pripojeni se k serveru, pokud se toto nepovede, koncim s provadenim programu */
 	if((sock = connectToServer(&params)) == -1) {
 		return -1;
 	}
 
-	/* Finally - communication with server */
+	/* KOMUNIKACE SE SERVEREM */
 	
-	sendMessage(sock, "", 0);	// ziskani welcome message
-	printf("%s\n", recvMessage(sock, &err).c_str());
+	sendMessage(sock, "", 0);									// ziskani welcome message
+	recvMessage(sock, &err);
 	
-	sendMessage(sock, "EHLO " + from + "\r\n", 1);	// uvodni zprava - poslani pozdravu EHLO s adresou klienta
+	sendMessage(sock, "EHLO " + from + "\r\n", 1);				// uvodni zprava - poslani pozdravu EHLO s adresou klienta
 	
 	while((buffer = recvMessage(sock, &err).c_str()) != "") {	
 		
-		if(buffer.find("250 ") != string::npos) { // cteme tak dlouho, dokud nenajdeme posledni radek, 
-												  // ktery musi zacinat kodem a za nim hned mezera, ostatni radky maji pomlcku za kodem
+		if(buffer.find("250 ") != string::npos) { 				// cteme tak dlouho, dokud nenajdeme posledni radek, 
+												  				// ktery musi zacinat kodem 250 a za nim hned mezera, ostatni radky maji pomlcku za kodem
             break;
         }
 	}
@@ -385,32 +379,25 @@ int main(int argc, char **argv) {
 	
 		pos = 0;
 		sendMessage(sock, "MAIL FROM: <" + from + ">\r\n", 2);
-	
-		// prijmuti odpovedi
-		buffer = recvMessage(sock, &err);	
-		//printf("%s\n", buffer.c_str());
-	
+		buffer = recvMessage(sock, &err);		
 	
 		/* Cyklus pro postupne parsovani adres */
-		   
 		while((pos = vecOfMessages[i].addressess.find(delimiter)) != string::npos) {
 		
 			temp = vecOfMessages[i].addressess.substr(0, pos);
 			
 		  	sendMessage(sock, "RCPT TO: <" + temp + ">\r\n", 3);
-			buffer = recvMessage(sock, &err);	
-			//printf("%s\n", buffer.c_str());
+			buffer = recvMessage(sock, &err);
 			
 			vecOfMessages[i].addressess.erase(0, pos + delimiter.length());
 		}
 		
 		sendMessage(sock, "RCPT TO: <" + vecOfMessages[i].addressess + ">\r\n", 3);
-		buffer = recvMessage(sock, &err);	
-		//printf("%s\n", buffer.c_str());
+		buffer = recvMessage(sock, &err);
+		
 		
 		sendMessage(sock, "DATA\r\n", 4);
 		buffer = recvMessage(sock, &err);	
-		//printf("%s\n", buffer.c_str());
 
 		/* Poslani cele zpravy serveru a znaku . - informuje server o tom, ze konci zprava */
 		sendMessage(sock, vecOfMessages[i].content, 5);
@@ -418,14 +405,16 @@ int main(int argc, char **argv) {
 		sendMessage(sock, "\r\n.\r\n", 6);
 		buffer = recvMessage(sock, &err);
 		
+		/* Pokud v prubehu odesilani zpravy dorazil signal o ukonceni programu, 
+		   zde to zjistim a ukoncim spojeni se serverem a nasledne program */
 		if(signalCatch == 1) {
 			
-			sendMessage(sock, "QUIT\r\n", 7);
+			sendQuit();
 			buffer = recvMessage(sock, &err);	
 			exit(0);
 		}
 		
-		i++;
+		i++;	// provedeme dalsi iteraci - poslani dalsi zpravy
 	}
 	
 	if(params.seconds != 0) {
@@ -434,11 +423,10 @@ int main(int argc, char **argv) {
 	}
 	
 	/* Ukonceni cele konverzace se serverem */
-		sendMessage(sock, "QUIT\r\n", 7);
-		buffer = recvMessage(sock, &err);	
-		printf("%s\n", buffer.c_str());
-		
-	//printf("%d\n", err);
+	sendQuit();
+	buffer = recvMessage(sock, &err);	
+	
+	close(sock);
 	
 	
 	return 0;
