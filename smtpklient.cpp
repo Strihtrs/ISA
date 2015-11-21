@@ -66,7 +66,7 @@ void initParams(struct params *params) {
 /* Globalni promenne */
 int sock;	// socket
 int signalCatch = 0;	// stavova promenna, kdyz odchytime signal
-int state = 0;			// stavova promenna, ktera znaci v jake fazi komunikace jsme
+int state = -1;			// stavova promenna, ktera znaci v jake fazi komunikace jsme
 
 
 
@@ -198,8 +198,7 @@ messageVec checkFile(string nameOfFile) {
 
 messageVec parseFile(FILE *f) {
 
-	
-	size_t bufferSize = 100;
+	size_t bufferSize = 1000;
     char *buffer = (char*) malloc(bufferSize * sizeof(char));
     struct message tempMes;
     string tempA;
@@ -217,7 +216,6 @@ messageVec parseFile(FILE *f) {
     	tempMes.addressess = tempA;
     	lineNumber++;
     	vecOfMessages.push_back(tempMes);
-        
     }
 
     fclose(f);		// soubor uz nebude potreba, muzeme zavrit
@@ -242,7 +240,7 @@ int connectToServer(params *params) {
 	if (errHost)
 	{
 	    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errHost));
-	    return 1;
+	    return -1;
 	}
 
 	sock = socket(res->ai_family, res->ai_socktype, 0);
@@ -254,7 +252,7 @@ int connectToServer(params *params) {
 
 	if(connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
 	    perror("Connect");
-	    return 1;
+	    return -1;
 	}
     
 	return sock;
@@ -284,6 +282,15 @@ string recvMessage(int sock, int *err) {
 		else if(c != '\r')
 			buffer +=c;
 	}
+
+	/* Overeni, zda server neukoncil komunikaci */
+	if(buffer.find("421") != string::npos) {
+
+		fprintf(stderr, "%s\n", "Server ukoncil spojeni.");
+		close(sock);
+		exit(0);
+	}
+
 	/* Overeni, zda od serveru prisla zprava o uspechu, pokud ne, musime vyresit chybu. */
 	if(!(buffer.find("250") != string::npos || 
 	     buffer.find("251") != string::npos || 
@@ -307,10 +314,16 @@ void checkError(string error, int sock) {
 void signalAction(int signum) {
 
 	signalCatch = 1;
+	
+	if(state == -1) {
+		close(sock);
+		exit(0);
+	}
 
-	if(state < 4 || state > 5) { 	// okamzite muzu zabit klienta, pokud uz neposilam zpravu na server
+	else if(state < 4 || state > 5) { 	// okamzite muzu zabit klienta, pokud uz neposilam zpravu na server
 		
 		sendQuit();
+		close(sock);
 		exit(0);
 	}
 }
@@ -328,7 +341,6 @@ int main(int argc, char **argv) {
 	messageVec vecOfMessages;
 	string from = "xkalou03";
 	string buffer;
-	char c;
 	int err = 0;
 
 	/* Osetreni signalu sigterm, sigint a sigquit */
@@ -397,7 +409,9 @@ int main(int argc, char **argv) {
 		
 		
 		sendMessage(sock, "DATA\r\n", 4);
-		buffer = recvMessage(sock, &err);	
+		buffer = recvMessage(sock, &err);
+
+		printf("%s\n", vecOfMessages[i].content.c_str());	
 
 		/* Poslani cele zpravy serveru a znaku . - informuje server o tom, ze konci zprava */
 		sendMessage(sock, vecOfMessages[i].content, 5);
@@ -410,7 +424,8 @@ int main(int argc, char **argv) {
 		if(signalCatch == 1) {
 			
 			sendQuit();
-			buffer = recvMessage(sock, &err);	
+			buffer = recvMessage(sock, &err);
+			close(sock);	
 			exit(0);
 		}
 		
