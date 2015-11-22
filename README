@@ -1,0 +1,28 @@
+SMTP Klient - Projekt ISA
+Autor: Filip Kalous (xkalou03)
+Datum: 22.11.2015
+
+
+SMTP Klient posilá uživatelům přes SMTP server zprávy, které najde specifikované v souboru, jehož název se zadáva jako parametr programu.
+Zde je popis všech parametrů programu:
+IP - (nepovinný, výchozí hodnota je 127.0.0.1) IP adresa SMTP serveru (možná IPv4 i IPv6)
+port - (nepovinný, výchozí hodnota je 25) port, na kterém SMTP server očekává příchozí spojení
+soubor - (povinný parametr) cesta k souboru, v kterém se nacházejí adresáti a zprávy pro ně
+sekund - (nepovinný parametr, výchozí hodnota 0) po odeslaní poslední správy sa neukončí spojení okamžitě,
+	 ale klient bude uměle udržovat spojení otevřené po dobu specifikovanou tímto parametrem.
+	 Nejvyšší hodnota, kterou je možné zadat je jedna hodina.
+
+Seznam souborů:
+Makefile
+README
+smtpklient.cpp
+manual.pdf
+
+Překlad programu:
+g++ -Wall -Wextra -pedantic smtpklient.cpp -o smtpklient
+
+Spouštění programu:
+./smtpklient [-i soubor] [-a ip] [-w sekund] [-p port]
+
+Příklad spuštění:
+./smtpklient -i zprava.txt -w 50

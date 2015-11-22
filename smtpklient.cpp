@@ -47,7 +47,7 @@ messageVec parseFile(FILE *f);
 int checkParameters(int argc, char **argv, struct params *params);
 messageVec checkFile(string nameOfFile);
 int connectToServer(params *params);
-void checkError(string error, int sock);
+void checkError(string error);
 void signalAction(int signum);
 void sendQuit();
 
@@ -77,13 +77,6 @@ int checkParameters(int argc, char **argv, struct params *params) {
 	char *error;
 	bool pI = false;
 	int c = 0;
-	int checkPort = 0;
-
-	/*if(argc > 5) {
-
-		fprintf(stderr, "Error - too many parameters! Pro nápovědu spusťte program jen s parametrem --help.\n");
-		return -1;
-	}*/
 
 	if(argc < 2) {
 
@@ -94,10 +87,10 @@ int checkParameters(int argc, char **argv, struct params *params) {
 	if(strcmp(argv[1], "--help") == 0) {
 		fprintf(stdout, "SMTP Klient posilá uživatelům přes SMTP server zprávy, které najde specifikované v souboru, jehož název se zadáva jako parametr programu.\n\n"
 				 		"Zde je popis všech parametrů programu:\n"
-						"IP - (nepovinný, výchozí hodnota je 127.0.0.1) IP adresa SMTP serveru (možná IPv4 i IPv6)\n"
-						"port - (nepovinný, výchozí hodnota je 25) port, na kterém SMTP server očekává příchozí spojení\n"
-					    "súbor - (povinný parametr) cesta k souboru, v kterém se nacházejí adresáti a zprávy pro ně\n"
-						"sekúnd - (nepovinný parametr, výchozí hodnota 0) po odeslaní poslední správy sa neukončí spojení okamžitě, " 
+						"-a - IP - (nepovinný, výchozí hodnota je 127.0.0.1) IP adresa SMTP serveru (možná IPv4 i IPv6)\n"
+						"-p - port - (nepovinný, výchozí hodnota je 25) port, na kterém SMTP server očekává příchozí spojení\n"
+					    "-i - soubor - (povinný parametr) cesta k souboru, v kterém se nacházejí adresáti a zprávy pro ně\n"
+						"-w - sekund - (nepovinný parametr, výchozí hodnota 0) po odeslaní poslední správy sa neukončí spojení okamžitě, " 
 						           "ale klient bude uměle udržovat spojení otevřené po dobu specifikovanou tímto parametrem. " 
 						           "Nejvyšší hodnota, kterou je možné zadat je jedna hodina.\n");
 		exit(0);
@@ -133,7 +126,7 @@ int checkParameters(int argc, char **argv, struct params *params) {
 
 			case 'p':
 				
-				checkPort = strtol(argv[optind -1], &error, 10);
+				strtol(argv[optind -1], &error, 10);
 				if(*error) {
 					fprintf(stderr, "%s\n", "Parametr -p musí obsahovat pouze čísla. Pro nápovědu spusťte program jen s parametrem --help.");
 					return -1;
@@ -163,6 +156,11 @@ int checkParameters(int argc, char **argv, struct params *params) {
 					c++;
 					optind++;
 				}
+				break;
+
+			default:
+				fprintf(stderr, "%s\n", "Neočekáváný parametr. Pro nápovědu spusťte program jen s parametrem --help.");
+				exit(0);
 				break;
 		}
 	}
@@ -212,6 +210,7 @@ messageVec parseFile(FILE *f) {
     
     	tempA              = strtok(buffer, " "); 
     	tempC              = strtok(NULL, "");
+    	tempC.erase(tempC.size()-1);		// smazani prebytecneho \n
     	tempMes.content    = tempC;
     	tempMes.addressess = tempA;
     	lineNumber++;
@@ -227,8 +226,7 @@ messageVec parseFile(FILE *f) {
 int connectToServer(params *params) {
 
 	int sock;
-	struct sockaddr_in server;
-    struct addrinfo hints = { 0 };
+    struct addrinfo hints;
 	struct addrinfo *res;
 
 
@@ -270,7 +268,6 @@ string recvMessage(int sock, int *err) {
 
 	unsigned char c;
 	string buffer("");
-	int b;
 	*err = 0;
 
 	while(1) {
@@ -300,13 +297,13 @@ string recvMessage(int sock, int *err) {
 	     buffer.find("221") != string::npos)) {
 
 		*err = 1;
-		checkError(buffer, sock);
+		checkError(buffer);
 	}
 
 	return buffer;	
 }
 
-void checkError(string error, int sock) {
+void checkError(string error) {
 
 	fprintf(stderr, "Error: %s\n", error.c_str());
 }
@@ -316,6 +313,7 @@ void signalAction(int signum) {
 	signalCatch = 1;
 	
 	if(state == -1) {
+		fprintf(stderr, "Program byl ukoncen signalem %d.\n", signum);
 		close(sock);
 		exit(0);
 	}
@@ -323,6 +321,7 @@ void signalAction(int signum) {
 	else if(state < 4 || state > 5) { 	// okamzite muzu zabit klienta, pokud uz neposilam zpravu na server
 		
 		sendQuit();
+		fprintf(stderr, "Program byl ukoncen signalem %d.\n", signum);
 		close(sock);
 		exit(0);
 	}
@@ -381,8 +380,8 @@ int main(int argc, char **argv) {
 	}
 	
 	// komu budeme data posilat
-	int i = 0;
-	int pos;
+	unsigned int i = 0;
+	unsigned int pos;
 	string temp;
 	string delimiter = ",";
 	
@@ -411,8 +410,6 @@ int main(int argc, char **argv) {
 		sendMessage(sock, "DATA\r\n", 4);
 		buffer = recvMessage(sock, &err);
 
-		printf("%s\n", vecOfMessages[i].content.c_str());	
-
 		/* Poslani cele zpravy serveru a znaku . - informuje server o tom, ze konci zprava */
 		sendMessage(sock, vecOfMessages[i].content, 5);
 
@@ -431,10 +428,29 @@ int main(int argc, char **argv) {
 		
 		i++;	// provedeme dalsi iteraci - poslani dalsi zpravy
 	}
+
+	int tempSec = 240;	// nastaveni 4 minut (240 sekund)
 	
-	if(params.seconds != 0) {
-		
-		sleep(params.seconds);
+	if(params.seconds != 0) {	// pokud mame udrzovat spojeni
+
+		if(params.seconds < 240)	// pokud je cekani mensi jak 4 minuty, 
+									// nemusim na server posilat NOOP zpravu
+			sleep(params.seconds);
+
+		else {
+
+			while(42) {				// jinak se cyklim do te doby,
+									// nez se dostanu pod 4 minuty
+				sleep(tempSec);
+				sendMessage(sock, "NOOP\r\n", 8);
+				recvMessage(sock, &err);
+				params.seconds -= tempSec;
+				if(params.seconds < 240) {
+					sleep(params.seconds);
+					break;
+				}
+			}
+		} 
 	}
 	
 	/* Ukonceni cele konverzace se serverem */
@@ -446,9 +462,3 @@ int main(int argc, char **argv) {
 	
 	return 0;
 }
-
-
-
-
-
-

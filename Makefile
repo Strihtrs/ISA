@@ -4,4 +4,4 @@
 CC=g++
 
 stmpklient: smtpklient.cpp
-	$(CC) smtpklient.cpp -o smtpklient
+	$(CC) -Wall -Wextra -pedantic smtpklient.cpp -o smtpklient
